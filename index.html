@@ -9,7 +9,7 @@
 <body>
 <main>
   <h1>Presentation Coach</h1>
-  <p class="sub">Step 2: speed and filler words</p>
+  <p class="sub">Speed, filler words and eye contact</p>
 
   <div class="stage">
     <video id="cam" autoplay playsinline muted></video>
@@ -21,7 +21,10 @@
     <div class="card"><span class="label">Words</span><span id="words" class="value">0</span></div>
     <div class="card"><span class="label">Speed</span><span id="wpm" class="value">&mdash;</span><span class="unit">words/min</span></div>
     <div class="card"><span class="label">Filler</span><span id="fillers" class="value">0</span><span class="unit">umm, uh</span></div>
+    <div class="card"><span class="label">Eyes</span><span id="eyes" class="value">&mdash;</span><span class="unit">1&ndash;10</span></div>
   </div>
+
+  <p id="eyeNote" class="hint" hidden></p>
 
   <div class="controls">
     <button id="start" class="primary">Start</button>
@@ -42,5 +45,6 @@
   <p id="transcript" class="transcript">Press Start and speak. Good pace is about 120&ndash;150 words per minute.</p>
 </main>
 <script src="app.js"></script>
+<script type="module" src="face.js"></script>
 </body>
 </html>

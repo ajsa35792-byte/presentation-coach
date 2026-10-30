@@ -8,6 +8,8 @@
   var wordsEl = document.getElementById('words');
   var wpmEl = document.getElementById('wpm');
   var fillersEl = document.getElementById('fillers');
+  var eyesEl = document.getElementById('eyes');
+  var eyeNoteEl = document.getElementById('eyeNote');
   var startBtn = document.getElementById('start');
   var stopBtn = document.getElementById('stop');
   var langSel = document.getElementById('lang');
@@ -17,6 +19,9 @@
 
   var stream = null;
   var recorder = null;
+  var fullRec = null;
+  var fullParts = [];
+  var stopsLeft = 0;
   var segmentTimer = null;
   var ticker = null;
   var audioCtx = null;
@@ -27,6 +32,7 @@
   var startedAt = 0;
   var finalWords = 0;
   var fillerCount = 0;
+  var eyeScore = null;
   var spokenText = '';
   var queue = Promise.resolve();
   var ending = false;
@@ -57,6 +63,8 @@
     if (!w) return false;
     if (/^u+m+h*$/.test(w)) return true;
     if (/^u+h+$/.test(w)) return true;
+    if (/^u+h*m+$/.test(w)) return true;
+    if (/^m+h*m*$/.test(w)) return true;
     if (/^[ae]h+$/.test(w)) return true;
     if (/^e+r+m*$/.test(w)) return true;
     if (/^h+m+$/.test(w)) return true;
@@ -99,6 +107,7 @@
     timeEl.textContent = formatTime(elapsedSeconds() * 1000);
     wordsEl.textContent = String(finalWords);
     fillersEl.textContent = String(fillerCount);
+    eyesEl.textContent = eyeScore === null ? '\u2014' : String(eyeScore);
     var wpm = speedNow();
     wpmEl.textContent = wpm === null ? '\u2014' : String(wpm);
   }
@@ -175,6 +184,7 @@
     form.append('file', blob, 'talk.webm');
     form.append('language', langSel.value);
     form.append('model', langSel.value === 'kk' ? 'gigaam' : 'whisper');
+    form.append('prompt', 'Um, uh, er, hmm, uhm.');
     return fetch(API + '/audio/transcriptions', { method: 'POST', body: form })
       .then(function (r) {
         if (!r.ok) {
@@ -218,8 +228,6 @@
         startSegment();
       } else {
         finalSeen = true;
-        stopAnalyser();
-        stopCamera();
       }
 
       var job = Promise.resolve();
@@ -253,6 +261,51 @@
     }, SEGMENT_MS);
   }
 
+  function startFullRecording() {
+    var audioOnly = new MediaStream(stream.getAudioTracks());
+    var mime = pickMime();
+    try {
+      fullRec = mime ? new MediaRecorder(audioOnly, { mimeType: mime }) : new MediaRecorder(audioOnly);
+    } catch (err) {
+      fullRec = null;
+      return;
+    }
+    fullParts = [];
+    fullRec.ondataavailable = function (event) {
+      if (event.data && event.data.size > 0) fullParts.push(event.data);
+    };
+    fullRec.onstop = function () {
+      var type = fullRec.mimeType || 'audio/webm';
+      var blob = new Blob(fullParts, { type: type });
+      noteStopped();
+      if (blob.size > 2000) finalPass(blob);
+    };
+    fullRec.start();
+  }
+
+  function finalPass(blob) {
+    transcribe(blob).then(function (text) {
+      var clean = text.trim();
+      if (!clean) return;
+      spokenText = clean;
+      finalWords = countWords(clean);
+      fillerCount = countFillers(clean);
+      renderTranscript();
+      updateStats();
+      renderSummary();
+    }).catch(function (err) {
+      showError('The final check failed: ' + err.message);
+    });
+  }
+
+  function noteStopped() {
+    if (running) return;
+    stopsLeft--;
+    if (stopsLeft > 0) return;
+    stopAnalyser();
+    stopCamera();
+  }
+
   function start() {
     if (!window.MediaRecorder) {
       showError('This browser cannot record the microphone. Use Chrome.');
@@ -265,6 +318,14 @@
     stopBtn.disabled = false;
     finalWords = 0;
     fillerCount = 0;
+    eyeScore = null;
+    if (window.pcFace && window.pcFace.ready) {
+      window.pcFace.begin();
+      eyeNoteEl.hidden = true;
+    } else {
+      eyeNoteEl.textContent = 'Eye contact is loading the face model\u2026';
+      eyeNoteEl.hidden = false;
+    }
     ending = false;
     queued = 0;
     finalSeen = false;
@@ -278,6 +339,7 @@
       startedAt = performance.now();
       startAnalyser();
       startSegment();
+      startFullRecording();
       if (ticker) clearInterval(ticker);
       ticker = setInterval(updateStats, 250);
     }).catch(function (err) {
@@ -306,7 +368,8 @@
     var wpm = speedNow();
     summaryEl.textContent = finalWords + ' words in ' + formatTime(stoppedSeconds * 1000) + ' \u2014 ' +
       (wpm === null ? '\u2014' : wpm) + ' words per minute, ' + fillerCount + ' filler ' +
-      (fillerCount === 1 ? 'word' : 'words') + '. ' + tipFor(wpm);
+      (fillerCount === 1 ? 'word' : 'words') + '. ' +
+      (eyeScore === null ? 'Eye contact: not measured.' : 'Eye contact: ' + eyeScore + '/10.') + ' ' + tipFor(wpm);
     summaryEl.hidden = false;
   }
 
@@ -326,23 +389,50 @@
       segmentTimer = null;
     }
     var active = recorder && recorder.state !== 'inactive';
+    var fullActive = fullRec && fullRec.state !== 'inactive';
+    stopsLeft = (active ? 1 : 0) + (fullActive ? 1 : 0);
     if (active) {
       recorder.stop();
     }
     recorder = null;
+    if (fullActive) {
+      fullRec.stop();
+    }
     if (ticker) {
       clearInterval(ticker);
       ticker = null;
     }
+    if (window.pcFace) window.pcFace.end();
     stopBtn.disabled = true;
     startBtn.disabled = false;
     langSel.disabled = false;
     if (!active) {
+      finalSeen = true;
+      queue.then(function () {
+        if (ending && queued === 0) finishSummary();
+      });
+    }
+    if (!active && !fullActive) {
       stopAnalyser();
       stopCamera();
-      finishSummary();
     }
   }
+
+  window.addEventListener('pc-face', function (event) {
+    var detail = event.detail;
+    eyeScore = detail.score;
+    updateStats();
+  });
+
+  window.addEventListener('pc-face-ready', function () {
+    eyeNoteEl.hidden = true;
+    if (running && window.pcFace) window.pcFace.begin();
+  });
+
+  window.addEventListener('pc-face-error', function (event) {
+    eyeNoteEl.textContent = event.detail;
+    eyeNoteEl.hidden = false;
+  });
 
   startBtn.addEventListener('click', start);
   stopBtn.addEventListener('click', stop);
