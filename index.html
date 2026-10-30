@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Presentation Coach</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>Presentation Coach</h1>
+  <p class="sub">Step 2: speed and filler words</p>
+
+  <div class="stage">
+    <video id="cam" autoplay playsinline muted></video>
+    <div id="camNote" class="cam-note">Camera is off</div>
+  </div>
+
+  <div class="stats">
+    <div class="card"><span class="label">Time</span><span id="time" class="value">0:00</span></div>
+    <div class="card"><span class="label">Words</span><span id="words" class="value">0</span></div>
+    <div class="card"><span class="label">Speed</span><span id="wpm" class="value">&mdash;</span><span class="unit">words/min</span></div>
+    <div class="card"><span class="label">Filler</span><span id="fillers" class="value">0</span><span class="unit">umm, uh</span></div>
+  </div>
+
+  <div class="controls">
+    <button id="start" class="primary">Start</button>
+    <button id="stop" disabled>Stop</button>
+    <label class="lang">Language
+      <select id="lang">
+        <option value="en-US">English</option>
+        <option value="ru-RU">Russian</option>
+        <option value="kk-KZ">Kazakh</option>
+      </select>
+    </label>
+  </div>
+
+  <p id="error" class="error" hidden></p>
+  <p id="summary" class="summary" hidden></p>
+
+  <h2>What the browser hears</h2>
+  <p id="transcript" class="transcript">Press Start and speak. Good pace is about 120&ndash;150 words per minute.</p>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
